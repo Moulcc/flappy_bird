@@ -1,6 +1,9 @@
 import glob
 import os
 import sys
+from collections import deque
+
+import pygame
 from random import randint
 
 # coding to do list
@@ -22,14 +25,16 @@ from random import randint
 # 5. 吃金币：？
 # 6. 单双人模式
 
-import pygame
+clock = pygame.time.Clock()
 
 pygame.init()
 
-w,h = 284*2 , 512
+FPS = 60
+w, h = 284 * 2, 512
 
 color1 = (45, 67, 80)
 color2 = (120, 20, 30)
+
 
 def load_image():
     images = {}
@@ -41,6 +46,7 @@ def load_image():
 
     return images
 
+
 screen_image = pygame.display.set_mode((w, h))
 screen_rect = screen_image.get_rect()
 
@@ -49,37 +55,55 @@ pygame.display.set_caption("Demo")
 bird = pygame.image.load('images/bird_wing_up.png')
 bird_rect = bird.get_rect()
 bird_rect.center = screen_rect.center
+bird_rect.x -= 100
 
-pipes = []
-pipes_rect = []
+pipes_que = deque()
+
+
 
 # 512 = 32*16
 # 十块
-for i in range(10):
-    rd = 3
-    pipe = pygame.image.load('images/pipe_body.png')
-    pipes_rect.append(pipe.get_rect())
-    pipes_rect[i].x = w
-    # top part
-    if i <= 4:
-        pipes_rect[i].y = 0 + 32 * (i-1)
-    # bot part
-    else:
-        pipes_rect[i].y = 512 - 32 * (i - 1) + 32 * rd
 
-    pipes.append(pipe)
+def init_pipes():
+    pipes = []
+    pipes_rect = []
 
-for i in range(2):
+    rd = randint(2, 7)  # maybe change between 3,4,5
+    for i in range(9):
+        pipe = pygame.image.load('images/pipe_body.png')
+        pipes_rect.append(pipe.get_rect())
+        pipes_rect[i].x = w
+        # top part
+        if i < rd:  # set 4 to rd
+            pipes_rect[i].y = 0 + 32 * i
+        # bot part
+        else:
+            pipes_rect[i].y = 512 - 32 - (i - rd) * 32
+        pipes.append(pipe)
+
     pipe = pygame.image.load('images/pipe_end.png')
-    pygame.image.load('images/background.png')
     pipes_rect.append(pipe.get_rect())
-    pipes_rect[i+10].x = w
-    pipes_rect[i+10].y = 300 - i * 32
+    pipes_rect[9].x = w
+    pipes_rect[9].y = 0 + 32 * rd
     pipes.append(pipe)
 
+    pipe = pygame.image.load('images/pipe_end.png')
+    pipes_rect.append(pipe.get_rect())
+    pipes_rect[10].x = w
+    pipes_rect[10].y = 512 - (10 - rd) * 32
+    pipes.append(pipe)
+
+    pipes_que.append([pipes,pipes_rect])
+
+#init_pipes()
+
+images = load_image()
 
 flag = 0
+frames = 0
 while not flag:
+    clock.tick(FPS)
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             sys.exit()
@@ -88,29 +112,42 @@ while not flag:
                 bird_rect.y -= 10
             if event.key == pygame.K_DOWN:
                 bird_rect.y += 10
-            if event.key == pygame.K_LEFT:
-                bird_rect.x -= 10
-            if event.key == pygame.K_RIGHT:
-                bird_rect.x += 10
-
-    images = load_image()
 
     screen_image.blit(images['background'], (0, 0))
     screen_image.blit(images['background'], (w / 2, 0))
 
-    for i in range(10):
-        pipes_rect[i].x -= 1
-    for i in range(10):
-        screen_image.blit(pipes[i], pipes_rect[i])
+    if frames % 240 == 0:  #  每三秒初始化一组pipes，插入pipe_que
+        init_pipes()
+
+    # 渲染目前还在pipe_que里的pipes
+    for k in range(len(pipes_que)):
+        for i in range(11):
+            pipes_que[k][1][i].x -= 1
+            screen_image.blit(pipes_que[k][0][i], pipes_que[k][1][i])
+
+    if pipes_que[0][1][1].x == -80:
+        pipes_que.popleft()
 
     screen_image.blit(bird, bird_rect)
 
-    for i in range(10):
+    # 检查最左第一根和第二根
+
+    for i in range(11):
         mask1 = pygame.mask.from_surface(bird)
-        mask2 = pygame.mask.from_surface(pipes[i])
-        offset = abs(bird_rect.x - pipes_rect[i].x), abs(bird_rect.y - pipes_rect[i].y)
+        mask2 = pygame.mask.from_surface(pipes_que[0][0][i])
+        offset = abs(bird_rect.x - pipes_que[0][1][i].x), abs(bird_rect.y - pipes_que[0][1][i].y)
         if mask1.overlap(mask2, offset) is not None:  # 已经碰撞
-            print("已经碰撞")
             flag = 1
+
+    if len(pipes_que) > 1:
+        for i in range(11):
+            mask1 = pygame.mask.from_surface(bird)
+            mask2 = pygame.mask.from_surface(pipes_que[1][0][i])
+            offset = abs(bird_rect.x - pipes_que[1][1][i].x), abs(bird_rect.y - pipes_que[1][1][i].y)
+            if mask1.overlap(mask2, offset) is not None:  # 已经碰撞
+                flag = 1
+
+
+    frames += 1
 
     pygame.display.flip()
